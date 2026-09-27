@@ -8,6 +8,7 @@ dependencies = [
     "black>=26.5.1",
     "chonkie[hub]>=1.7.0",
     "chromadb>=1.5.9",
+    "ddgs>=9.16.0",
     "fastapi>=0.141.1",
     "fastembed>=0.8.1",
     "langchain-groq>=1.1.3",
