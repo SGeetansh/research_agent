@@ -89,7 +89,7 @@ async def research(
             return
 
         for chunk in stored_chunks:
-            metadata =chunk["metadata"]
+            metadata = chunk["metadata"]
 
             yield f"Chunk index: {metadata['chunk_index']}"
             yield f"Source: {metadata['source']}\n"
