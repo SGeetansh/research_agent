@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from parsers import parse_pdf
-from vector_storage import search_chunks, clear_store, store_chunks
+from vector_storage import clear_store, store_chunks
 from llm.graph import research_agent
 from format_response import stream_research_result
 app = FastAPI()
@@ -81,7 +81,7 @@ async def upload_sources(
         "uploaded": uploaded,
     }
 
-
+# NOTE: UNCOMMENT IF CITATIONS ARE NECESSARY AND STREAMING IS NOT
 # @app.post("/api/research")
 # async def research(
 #     payload: ResearchRequest,
@@ -97,21 +97,51 @@ async def upload_sources(
 #         media_type="text/markdown",
 #     )
 
+# @app.post("/api/research")
+# async def research(payload: ResearchRequest):
+
+#     async def generate():
+#         async for message, metadata in research_agent.astream(
+#             {
+#                 "request": payload.request,
+#             },
+#             stream_mode="messages",
+#         ):
+#             if metadata.get("langgraph_node") != "generate_answer":
+#                 continue
+
+#             if message.content:
+#                 yield message.content
+
+#     return StreamingResponse(
+#         generate(),
+#         media_type="text/markdown",
+#     )
+
 @app.post("/api/research")
 async def research(payload: ResearchRequest):
 
     async def generate():
-        async for message, metadata in research_agent.astream(
-            {
-                "request": payload.request,
-            },
-            stream_mode="messages",
-        ):
-            if metadata.get("langgraph_node") != "generate_answer":
-                continue
+        final_res = {}
 
-            if message.content:
-                yield message.content
+        async for mode, data in research_agent.astream(
+            {"request": payload.request},
+            stream_mode=["messages", "values"],
+        ):
+            if mode == "messages":
+                message, metadata = data
+
+                if metadata.get("langgraph_node") == "generate_answer":
+                    if message.content:
+                        yield message.content
+
+            elif mode == "values":
+                final_res = data
+
+        yield "\n\n--------\n\n"
+
+        async for part in stream_research_result(final_res):
+            yield part
 
     return StreamingResponse(
         generate(),
