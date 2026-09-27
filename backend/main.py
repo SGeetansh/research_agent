@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from parsers import parse_pdf
-
+from vector_storage import search_chunks, clear_store, store_chunks
 app = FastAPI()
 
 app.add_middleware(
@@ -50,16 +50,22 @@ async def upload_sources(
                 status_code=400,
                 detail=f"{file.filename} is not a PDF.",
             )
-
+        
+        file_name = file.filename
         file_bytes = await file.read()
-
         chunks = await asyncio.to_thread(
             parse_pdf,
             file_bytes,
             file.filename,
         )
+        await asyncio.to_thread(
+            store_chunks,
+            chunks,
+            file_name,
+        )
 
-        stored_chunks.extend(chunks)
+
+        # stored_chunks.extend(chunks)
 
         uploaded.append(
             {
@@ -70,7 +76,6 @@ async def upload_sources(
 
     return {
         "uploaded": uploaded,
-        "total_chunks": len(stored_chunks),
     }
 
 
@@ -78,28 +83,44 @@ async def upload_sources(
 async def research(
     payload: ResearchRequest,
 ):
+    results = await asyncio.to_thread(
+        search_chunks,
+        payload.request,
+        10,
+    )
     async def generate():
-        yield f"____________CHUNKS______________"
-        yield f"Total chunks: {len(stored_chunks)}"
+        # yield f"____________CHUNKS______________"
+        # yield f"Total chunks: {len(stored_chunks)}"
 
-        yield f"Input text: {payload.request}\n"
+        # yield f"Input text: {payload.request}\n"
 
-        if not stored_chunks:
-            yield "Chunk storage is empty.\n"
-            return
+        # if not stored_chunks:
+        #     yield "Chunk storage is empty.\n"
+        #     return
 
-        for chunk in stored_chunks:
-            metadata = chunk["metadata"]
+        # for chunk in stored_chunks:
+        #     metadata = chunk["metadata"]
 
-            yield f"Chunk index: {metadata['chunk_index']}"
-            yield f"Source: {metadata['source']}\n"
-            yield f"Page: {metadata['page']}\n"
-            yield f"Token count: {metadata['token_count']}\n"
-            yield f"Characters: {metadata['start_index']} -> {metadata['end_index']}"
+        #     yield f"Chunk index: {metadata['chunk_index']}"
+        #     yield f"Source: {metadata['source']}\n"
+        #     yield f"Page: {metadata['page']}\n"
+        #     yield f"Token count: {metadata['token_count']}\n"
+        #     yield f"Characters: {metadata['start_index']} -> {metadata['end_index']}"
 
-            yield "-----Markdown: \n"
-            yield chunk["text"]
-            yield "\n\n"
+        #     yield "-----Markdown: \n"
+        #     yield chunk["text"]
+        #     yield "\n\n"
+
+        yield f"Query: {payload.request}\n" 
+        yield f"results: {len(results)}"
+
+        for rank, result in enumerate(results, start=1):
+            metadata = result["metadata"]
+            yield f'RANK: {rank}'
+            yield f'DISTANCE: {result['distance']}'
+            yield f'SOURCE DOC: {metadata['source']}'
+            yield f'PAGE: {metadata['page']}'
+            yield f'RESULT TEXT: {result['text']}'
 
     return StreamingResponse(
         generate(),
