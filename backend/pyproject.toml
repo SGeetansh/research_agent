@@ -5,9 +5,13 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "chonkie>=1.7.0",
     "fastapi>=0.141.1",
+    "huggingface-hub>=2.0.0",
+    "jsonschema>=4.26.0",
     "markdown-it-py>=4.2.0",
     "pymupdf4llm>=1.28.2",
     "python-multipart>=0.0.32",
+    "tiktoken>=0.14.0",
     "uvicorn>=0.54.0",
 ]

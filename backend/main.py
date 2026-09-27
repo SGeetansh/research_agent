@@ -1,12 +1,20 @@
-from fastapi import FastAPI, status, UploadFile, File, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import uvicorn
-from parsers import parse_pdf
 import asyncio
+
+import uvicorn
+
+from fastapi import (
+    FastAPI,
+    File,
+    HTTPException,
+    UploadFile,
+)
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from parsers import parse_pdf
 
 app = FastAPI()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins="http://localhost:5173",
@@ -15,83 +23,104 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+stored_chunks: list[dict] = []
+
+
 class ResearchRequest(BaseModel):
     request: str
 
-storage = []
 
 @app.post("/api/sources")
-async def sources(files: list[UploadFile] = File(...)):
-    """
-    Check uploaded files for filetype == pdf
+async def upload_sources(
+    files: list[UploadFile] = File(...),
+):
+    global stored_chunks
 
-    Parse the pdf to markdown
-    parse markdown -> seperate headings subheadings text tables etc
-    put them into docs which are semantically aware where they belong + pagenumber
-    chunking and getting documents for feeding into embedding and then to vector store
-    
-    """
-    global storage
+    stored_chunks = []
 
-    uploaded_docs = []
-
-    uploaded_docs.clear()
-    storage.clear()
+    uploaded = []
 
     for file in files:
-        filename = file.filename or "unknown.pdf"
-        if not filename.lower().endswith(".pdf"):
+        if not file.filename:
+            continue
+
+        if not file.filename.lower().endswith(".pdf"):
             raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
-            detail="Please upload only PDF files"
+                status_code=400,
+                detail=f"{file.filename} is not a PDF.",
+            )
+
+        file_bytes = await file.read()
+
+        chunks = await asyncio.to_thread(
+            parse_pdf,
+            file_bytes,
+            file.filename,
         )
 
-        content = await file.read()
+        stored_chunks.extend(chunks)
 
-        parsed_pdf = await asyncio.to_thread(parse_pdf, content, filename)
-
-        storage.extend(parsed_pdf)
-
-        uploaded_docs.append(
+        uploaded.append(
             {
-                "name": filename,
-                "pages": len(storage),
+                "name": file.filename,
+                "chunks": len(chunks),
             }
         )
 
-    return {"uploaded": uploaded_docs}
+    return {
+        "uploaded": uploaded,
+        "total_chunks": len(stored_chunks),
+    }
 
 
 @app.post("/api/research")
-async def research(payload: ResearchRequest):
-    """
-    Stream output for now. We just need to check. All the chunking and document conversion is happenign in the sources endpoint
+async def research(
+    payload: ResearchRequest,
+):
+    async def generate():
+        yield f"____________CHUNKS______________"
+        yield f"Total chunks: {len(stored_chunks)}"
 
-    """
-    
+        yield f"Input text: {payload.request}\n"
 
-    def data_generator():
-        yield '++++++.  Structured blocks.  ++++++++++\n\n\n'
-        yield f'Request: {payload.request}'
-        for block in storage:
-            section = (
-                " > ".join(block["section_path"])
-                if block["section_path"] else "NONE"
-            )
+        if not stored_chunks:
+            yield "Chunk storage is empty.\n"
+            return
 
-            yield f'Page: {block["page"]}'
-            yield f'Block: {block['block_index']}\n\n'
+        for chunk in stored_chunks:
+            metadata =chunk["metadata"]
 
-            yield f'Section: {section}\n\n'
-            yield f'Type: {block["block_type"]}\n\n'
+            yield f"Chunk index: {metadata['chunk_index']}"
+            yield f"Source: {metadata['source']}\n"
+            yield f"Page: {metadata['page']}\n"
+            yield f"Token count: {metadata['token_count']}\n"
+            yield f"Characters: {metadata['start_index']} -> {metadata['end_index']}"
 
-    return StreamingResponse(data_generator(), media_type="text/markdown")
- 
+            yield "-----Markdown: \n"
+            yield chunk["text"]
+            yield "\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/markdown",
+    )
+
+
+@app.get("/health")
+def health():
+    return {
+        "status": "ok",
+    }
+
 
 def main() -> None:
-    """Entrypoint to invoke when this module is invoked on the remote server."""
-    uvicorn.run("main:app", host="0.0.0.0")
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8787,
+    )
+
 
 if __name__ == "__main__":
     main()
-
