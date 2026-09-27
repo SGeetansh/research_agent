@@ -7,7 +7,7 @@ import tiktoken
 from chonkie import RecursiveChunker
 from chonkie.tokenizer import TokenizerProtocol
 
-CHUNK_SIZE = 200
+CHUNK_SIZE = 400
 
 encoding = tiktoken.get_encoding("cl100k_base")
 
