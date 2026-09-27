@@ -1,20 +1,24 @@
 import asyncio
-import os
 from typing import TypedDict
 from langgraph.graph import END, START, StateGraph
 from .prompts import (
     ANSWER_SYSTEM_PROMPT,
     REWRITE_QUERY_SYSTEM_PROMPT,
+    WEB_ROUTER_SYSTEM_PROMPT,
     build_answer_prompt,
 )
 from vector_storage import search_chunks
 from .client import llm
+from web_search import search_web
 
 
 class ResearchState(TypedDict, total=False):
     request: str
     retrieval_query: str
-    results: list[dict]
+    document_results: list[dict]
+    web_results: list[dict]
+    use_web: bool
+    route_reason: str
     answer: str
 
 
@@ -53,72 +57,166 @@ async def retrieve_documents(
     )
 
     return {
-        "results": results,
+        "document_results": results,
+    }
+
+
+async def decide_web_search(
+    state: ResearchState,
+) -> dict:
+    document_results = state.get(
+        "document_results",
+        [],
+    )
+
+    document_preview = "\n\n".join(
+        result["text"][:500]
+        for result in document_results[:3]
+    )
+
+    response = await llm.ainvoke(
+        [
+            {
+                "role": "system",
+                "content": WEB_ROUTER_SYSTEM_PROMPT,
+            },
+            {
+                "role": "user",
+                "content": f"""
+User request:
+{state["request"]}
+
+Retrieved document evidence:
+{document_preview or "No relevant uploaded documents were found."}
+""".strip(),
+            },
+        ]
+    )
+
+    decision = response.content.strip().upper()
+    use_web = decision == "WEB"
+
+    return {
+        "use_web": use_web,
+        "route_reason": decision,
+    }
+
+
+def route_after_orchestrator(
+    state: ResearchState,
+) -> str:
+
+    if state.get("use_web", False):
+        return "web"
+
+    return "answer"
+
+
+async def retrieve_web(
+    state: ResearchState,
+) -> dict:
+    """
+    TODO
+    """
+
+    results = await asyncio.to_thread(
+        search_web,
+        state["retrieval_query"],
+        5,
+    )
+
+    return {
+        "web_results": results,
     }
 
 
 def build_context(
-    results: list[dict]
+    document_results: list[dict],
+    web_results: list[dict],
 ) -> str:
+    """
+    Uploaded documents: [Di]
+    Internet sources: [Wi]
+    """
 
     sources = []
 
     for index, result in enumerate(
-        results,
+        document_results,
         start=1,
     ):
         metadata = result["metadata"]
 
         source = metadata.get(
             "source",
-            "Unknown source",
+            "Unknown document",
         )
 
-        page = metadata.get("page")
-
-        chunk_index = metadata.get(
-            "chunk_index"
+        page = metadata.get(
+            "page",
         )
 
         text = result["text"]
 
         sources.append(
             f"""
-[S{index}]
+[D{index}]
+Type: Uploaded document
 Source: {source}
 Page: {page}
-Chunk: {chunk_index}
 
 {text}
 """.strip()
         )
 
-    return "\n\n\n SOURCES: \n\n\n".join(
+    for index, result in enumerate(
+        web_results,
+        start=1,
+    ):
+        sources.append(
+    f"""
+        [W{index}]
+        Type: Web source
+        Title: {result["title"]}
+        URL: {result["url"]}
+        Content source: {result.get("content_source", "unknown")}
+
+        {result["text"]}
+        """.strip()
+        )
+
+    return "\n\n------\n\n".join(
         sources
     )
-
 
 async def generate_answer(
     state: ResearchState,
 ) -> dict:
 
-    results = state["results"]
+    document_results = state.get(
+        "document_results",
+        [],
+    )
 
-    if not results:
+    web_results = state.get(
+        "web_results",
+        [],
+    )
+
+    if (
+        not document_results
+        and not web_results
+    ):
         return {
             "answer": (
-                "I couldn't find relevant information "
-                "in the uploaded sources."
+                "Couldn't find relevant information "
+                "in the uploaded documents or on the web."
             )
         }
 
     context = build_context(
-        results
-    )
-
-    user_prompt = build_answer_prompt(
-        request=state["request"],
-        context=context,
+        document_results=document_results,
+        web_results=web_results,
     )
 
     response = await llm.ainvoke(
@@ -129,7 +227,10 @@ async def generate_answer(
             },
             {
                 "role": "user",
-                "content": user_prompt,
+                "content": build_answer_prompt(
+                    request=state["request"],
+                    context=context,
+                ),
             },
         ]
     )
@@ -139,18 +240,28 @@ async def generate_answer(
     }
 
 
-builder = StateGraph(
-    ResearchState
-)
-
-
+builder = StateGraph(ResearchState)
 builder.add_node("rewrite_query", rewrite_query)
 builder.add_node("retrieve_documents", retrieve_documents)
+builder.add_node("decide_web_search", decide_web_search)
+builder.add_node("retrieve_web", retrieve_web)
 builder.add_node("generate_answer", generate_answer)
+
 
 builder.add_edge(START, "rewrite_query")
 builder.add_edge("rewrite_query", "retrieve_documents")
-builder.add_edge("retrieve_documents", "generate_answer")
+builder.add_edge("retrieve_documents", "decide_web_search")
+
+builder.add_conditional_edges(
+    "decide_web_search",
+    route_after_orchestrator,
+    {
+        "web": "retrieve_web",
+        "answer": "generate_answer",
+    },
+)
+
+builder.add_edge("retrieve_web", "generate_answer")
 builder.add_edge("generate_answer",END)
 
 research_agent = builder.compile()

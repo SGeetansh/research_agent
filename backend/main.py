@@ -1,5 +1,4 @@
 import asyncio
-
 import uvicorn
 
 from fastapi import (
@@ -14,6 +13,7 @@ from pydantic import BaseModel
 from parsers import parse_pdf
 from vector_storage import search_chunks, clear_store, store_chunks
 from llm.graph import research_agent
+from format_response import stream_research_result
 app = FastAPI()
 
 app.add_middleware(
@@ -86,84 +86,32 @@ async def upload_sources(
 # async def research(
 #     payload: ResearchRequest,
 # ):
-#     results = await asyncio.to_thread(
-#         search_chunks,
-#         payload.request,
-#         10,
+#     result = await research_agent.ainvoke(
+#         {
+#             "request": payload.request,
+#         }
 #     )
-#     async def generate():
-#         # yield f"____________CHUNKS______________"
-#         # yield f"Total chunks: {len(stored_chunks)}"
-
-#         # yield f"Input text: {payload.request}\n"
-
-#         # if not stored_chunks:
-#         #     yield "Chunk storage is empty.\n"
-#         #     return
-
-#         # for chunk in stored_chunks:
-#         #     metadata = chunk["metadata"]
-
-#         #     yield f"Chunk index: {metadata['chunk_index']}"
-#         #     yield f"Source: {metadata['source']}\n"
-#         #     yield f"Page: {metadata['page']}\n"
-#         #     yield f"Token count: {metadata['token_count']}\n"
-#         #     yield f"Characters: {metadata['start_index']} -> {metadata['end_index']}"
-
-#         #     yield "-----Markdown: \n"
-#         #     yield chunk["text"]
-#         #     yield "\n\n"
-
-#         yield f"Query: {payload.request}\n" 
-#         yield f"results: {len(results)}"
-
-#         for rank, result in enumerate(results, start=1):
-#             metadata = result["metadata"]
-#             yield f'RANK: {rank}'
-#             yield f'DISTANCE: {result['distance']}'
-#             yield f'SOURCE DOC: {metadata['source']}'
-#             yield f'PAGE: {metadata['page']}'
-#             yield f'RESULT TEXT: {result['text']}'
 
 #     return StreamingResponse(
-#         generate(),
+#         stream_research_result(result),
 #         media_type="text/markdown",
 #     )
 
-
 @app.post("/api/research")
-async def research(
-    payload: ResearchRequest,
-):
-
-    result = await research_agent.ainvoke(
-        {
-            "request": payload.request,
-        }
-    )
+async def research(payload: ResearchRequest):
 
     async def generate():
+        async for message, metadata in research_agent.astream(
+            {
+                "request": payload.request,
+            },
+            stream_mode="messages",
+        ):
+            if metadata.get("langgraph_node") != "generate_answer":
+                continue
 
-        yield "Query by LLM for vector search\n"
-        yield f"{result['retrieval_query']}\n"
-        yield f'result["answer"]\n\n\n'
-
-        yield "Sources\n"
-
-        for index, result_item in enumerate(result["results"], start=1):
-            metadata = result_item["metadata"]
-            source = metadata.get(
-                "source",
-                "unknown",
-            )
-            page = metadata.get("page")
-            yield (
-                f"- [Source {index}] - "
-                f"{source}"
-            )
-            if page is not None:
-                yield f", page {page}"
-            yield "\n\n\n"
+            if message.content:
+                yield message.content
 
     return StreamingResponse(
         generate(),

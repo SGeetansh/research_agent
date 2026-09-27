@@ -76,22 +76,13 @@ def store_chunks(chunks: list[dict], filename: str) -> None:
         ],
 
         documents=texts,
-
         embeddings=embeddings,
-
         metadatas=[
             {
-                "source":
-                    chunk["metadata"]["source"],
-
-                "page":
-                    chunk["metadata"]["page"],
-
-                "chunk_index":
-                    chunk["metadata"]["chunk_index"],
-
-                "token_count":
-                    chunk["metadata"]["token_count"],
+                "source": chunk["metadata"]["source"],
+                "page": chunk["metadata"]["page"],
+                "chunk_index": chunk["metadata"]["chunk_index"],
+                "token_count": chunk["metadata"]["token_count"],
             }
             for chunk in chunks
         ],
