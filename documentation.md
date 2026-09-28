@@ -5,11 +5,12 @@ The easiest way to run the project is with Docker. Make sure you have:
 - A groq API key - https://console.groq.com/home
 - Internet access - the project downloads an embedding model locally
 
-You also need a .env file in the ./backend directory. A .env.example file is provided.
+You also need a .env file in the ./backend directory. A .env.example file is provided.  
 
-You can start the project with
+Clone the project. Then you can start the project with:
 ```
-docker compose up --build
+cd research_agent
+docker compose up
 ```
 
 The services will be available at:      
