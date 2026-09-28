@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from parsers import parse_pdf
 from vector_storage import clear_store, store_chunks
 from llm.graph import research_agent
-from format_response import stream_research_result
+from format_response import stream_sources
 app = FastAPI()
 
 app.add_middleware(
@@ -138,9 +138,7 @@ async def research(payload: ResearchRequest):
             elif mode == "values":
                 final_res = data
 
-        yield "\n\n--------\n\n"
-
-        async for part in stream_research_result(final_res):
+        async for part in stream_sources(final_res):
             yield part
 
     return StreamingResponse(
