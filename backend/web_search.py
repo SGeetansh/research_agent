@@ -1,6 +1,8 @@
 from ddgs import DDGS
 from trafilatura import fetch_url, extract
+from logger import get_logger
 
+logger = get_logger(__name__)
 
 MAX_CHARS = 8_000
 
@@ -34,6 +36,10 @@ def search_web(
     query: str,
     k: int = 5,
 ) -> list[dict]:
+    logger.info(
+        "Searching web for %d results",
+        k,
+    )
 
     ddgs = DDGS()
 
@@ -41,6 +47,10 @@ def search_web(
         query=query,
         backend="duckduckgo",
         max_results=k,
+    )
+    logger.info(
+    "DuckDuckGo returned %d results",
+    len(search_results),
     )
 
     results = []
@@ -60,8 +70,10 @@ def search_web(
                     text = page_content
                     content_source = "webpage"
             except Exception as exc:
-                print(
-                    f"Failed to extract {url}: {exc}"
+                logger.warning(
+                    "Web extraction failed for %s, using snippet: %s",
+                    url,
+                    exc,
                 )
         results.append(
             {

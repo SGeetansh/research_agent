@@ -1,5 +1,8 @@
 import asyncio
 import uvicorn
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 from fastapi import (
     FastAPI,
@@ -36,6 +39,10 @@ class ResearchRequest(BaseModel):
 async def upload_sources(
     files: list[UploadFile] = File(...),
 ):
+    logger.info(
+        "Received %d uploaded file(s)",
+        len(files),
+    )
     global stored_chunks
 
     stored_chunks = []
@@ -75,6 +82,11 @@ async def upload_sources(
                 "name": file.filename,
                 "chunks": len(chunks),
             }
+        )
+        logger.info(
+            "Upload complete: %s (%d chunks)",
+            file.filename,
+            len(chunks),
         )
 
     return {
@@ -120,7 +132,8 @@ async def upload_sources(
 
 @app.post("/api/research")
 async def research(payload: ResearchRequest):
-
+    """TODO"""
+    logger.info("Research request received")
     async def generate():
         final_res = {}
 
@@ -140,6 +153,7 @@ async def research(payload: ResearchRequest):
 
         async for part in stream_sources(final_res):
             yield part
+        logger.info("Research request complete")
 
     return StreamingResponse(
         generate(),

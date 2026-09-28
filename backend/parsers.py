@@ -6,6 +6,9 @@ import tiktoken
 
 from chonkie import RecursiveChunker
 from chonkie.tokenizer import TokenizerProtocol
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 CHUNK_SIZE = 400
 
@@ -26,6 +29,10 @@ def parse_pdf(
     file: bytes,
     file_name: str,
 ) -> list[dict]:
+    logger.info(
+        "Parsing PDF: %s",
+        file_name,
+    )
 
     with pymupdf.open(
         stream=file,
@@ -35,6 +42,11 @@ def parse_pdf(
             document,
             page_chunks=True,
             force_ocr=False,
+        )
+        logger.info(
+            "%s contains %d pages",
+            file_name,
+            len(document),
         )
 
     chunks = []

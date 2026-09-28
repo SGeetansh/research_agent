@@ -10,7 +10,9 @@ from .prompts import (
 from vector_storage import search_chunks
 from .client import llm
 from web_search import search_web
+from logger import get_logger
 
+logger = get_logger(__name__)
 
 class ResearchState(TypedDict, total=False):
     request: str
@@ -26,7 +28,9 @@ async def rewrite_query(
     state: ResearchState,
 ) -> dict:
     """Agent responsible for rewriting the query optimized for vector search"""
-
+    logger.info(
+        "Rewriting query for retrieval"
+    )
     response = await llm.ainvoke(
         [
             {
@@ -39,6 +43,9 @@ async def rewrite_query(
             },
         ]
     )
+    logger.info(
+        "Retrieval query generated"
+    )
 
     return {
         "retrieval_query": response.content.strip(),
@@ -50,10 +57,17 @@ async def retrieve_documents(
     state: ResearchState
 ) -> dict:
     """TODO"""
+    logger.info(
+        "Searching uploaded documents"
+    )
     results = await asyncio.to_thread(
         search_chunks,
         state["retrieval_query"],
         5,
+    )
+    logger.info(
+        "Retrieved %d document chunks",
+        len(results),
     )
 
     return {
@@ -64,6 +78,9 @@ async def retrieve_documents(
 async def decide_web_search(
     state: ResearchState,
 ) -> dict:
+    logger.info(
+        "Deciding whether web search is required"
+    )
     document_results = state.get(
         "document_results",
         [],
@@ -95,6 +112,13 @@ Retrieved document evidence:
 
     decision = response.content.strip().upper()
     use_web = decision == "WEB"
+    
+    logger.info(
+        "Router decision: %s",
+        "web search required"
+        if use_web
+        else "documents sufficient",
+    )
 
     return {
         "use_web": use_web,
@@ -118,13 +142,18 @@ async def retrieve_web(
     """
     TODO
     """
-
+    logger.info(
+        "Retrieving external web sources"
+    )
     results = await asyncio.to_thread(
         search_web,
         state["retrieval_query"],
         5,
     )
-
+    logger.info(
+        "Retrieved %d web sources",
+        len(results),
+    )
     return {
         "web_results": results,
     }
@@ -192,6 +221,9 @@ Page: {page}
 async def generate_answer(
     state: ResearchState,
 ) -> dict:
+    logger.info(
+        "Generating grounded answer"
+    )
 
     document_results = state.get(
         "document_results",
@@ -233,6 +265,9 @@ async def generate_answer(
                 ),
             },
         ]
+    )
+    logger.info(
+        "Answer generation complete"
     )
 
     return {

@@ -1,22 +1,31 @@
 import chromadb
-
 from fastembed import TextEmbedding
+from logger import get_logger   
 
+logger = get_logger(__name__)
 
 CHROMA_STORAGE_PATH = "./chroma_db"
 COLLECTION = "uploaded_sources_bge_base"
 MODEL_NAME = "BAAI/bge-base-en-v1.5"
 
+logger.info("Loading embedding model: %s", MODEL_NAME)
 embedding_model = TextEmbedding(
     model_name=MODEL_NAME,
 )
+logger.info("Embedding model loaded.")
 
+logger.info("Opening Chroma database at %s", CHROMA_STORAGE_PATH)
 client = chromadb.PersistentClient(
     path=CHROMA_STORAGE_PATH,
 )
 collection = client.get_or_create_collection(
     name=COLLECTION,
 )
+logger.info(
+    "Chroma collection ready: %s",
+    COLLECTION,
+)
+
 def embed_documents(
     texts: list[str],
 ) -> list[list[float]]:
@@ -50,6 +59,11 @@ def store_chunks(chunks: list[dict], filename: str) -> None:
     """
     TODO
     """
+    logger.info(
+        "Embedding %d chunks from %s",
+        len(chunks),
+        filename,
+    )
 
     collection.delete(
         where={
@@ -58,6 +72,10 @@ def store_chunks(chunks: list[dict], filename: str) -> None:
     )
 
     if not chunks:
+        logger.warning(
+            "No chunks to store for %s",
+            filename,
+        )
         return
 
     texts = [
@@ -86,6 +104,11 @@ def store_chunks(chunks: list[dict], filename: str) -> None:
             }
             for chunk in chunks
         ],
+    )
+    logger.info(
+        "Stored %d chunks from %s",
+        len(chunks),
+        filename,
     )
 
 
