@@ -136,25 +136,25 @@ I have provided 3 PDFs in the backend/public directory. The content are:
 2. bitcoin.pdf (Original bitcoin whitepaper)
 3. jake_resume.pdf (sample resume)
 
-Example input 1:
+### Example input 1:
 input: jake_resume.pdf      
 query: where did jake study?        
 type: document only search      
 response: you should receive the 2 institutions where jake studied at.      
 
-Example input 2:        
+### Example input 2:        
 input: jake_resume.pdf      
 query: what does jake do?       
 type: document only search      
 response: You should get a response saying that he is an Undergraduate Research Assistant at Texas A&M University. 
 
-input: jake_resume.pdf      
+### Example input 3: jake_resume.pdf      
 query: what are the roles and responsibilities of an Undergraduate Research Assistant at Texas A&M University?
 type: document + web search     
 response: you should get a long response of the roles and responsibilities of an Undergraduate Research Assistant at Texas A&M University.      
 
 
-Example input 4:        
+### Example input 4:        
 input: bitcoin.pdf          
 query: how does bitcoin secure our transactions?                
 type: document only search            
@@ -183,8 +183,10 @@ In short, Bitcoin uses cryptographic signatures to prove ownership, a PoW‑base
 - **[D5]** bitcoin.pdf, page 2
 ```
 
-input: attention.pdf
-query: what are positional encodings
+### Example input 5
+input: attention.pdf    
+query: what are positional encodings    
+type: document only 
 response:
 ```
 **Positional encoding** is a technique used in the Transformer to give the model a sense of the order of tokens in a sequence, because the architecture itself contains no recurrence or convolution.  
